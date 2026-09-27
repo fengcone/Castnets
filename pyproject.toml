@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "castnets"
+version = "0.1.0"
+description = "可插话播客：RSS、播放位置上下文与问答支线的 M0"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.scripts]
+castnets = "castnets.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["castnets*"]
+
+[tool.setuptools.package-data]
+castnets = ["sample/*.xml", "sample/*.json", "sample/*.md"]
