@@ -4,7 +4,7 @@ Castnets 是一个 Android 优先、语音优先的“可插话播客播放器�
 播客时暂停并提问；问题和回答被保存为锚定 `episode_id + anchor_ms` 的 Conversation
 Branch。说“继续”后，客户端按服务端返回的位置恢复播放，默认回退 5 秒。
 
-当前仓库是 M0 后端闭环，不是完整播放器。它刻意使用可审计的离线 mock 回答，不会把 AI
+当前仓库包含 M0 后端闭环和 M1 Android 手机原型。回答仍使用可审计的离线 mock，不会把 AI
 包装成主持人或嘉宾，也不会在没有逐句对齐信息时假装知道“刚才那一秒”说了什么。
 
 ## M0 已覆盖
@@ -18,6 +18,18 @@ Branch。说“继续”后，客户端按服务端返回的位置恢复播放�
 - 无 API key、无网络时仍能返回结构化 mock 回答。词表没有覆盖的问题会明确返回
   `insufficient_context`，不会编造答案。
 - 提供 loopback-only HTTP API 和由领域 dataclass 生成的 OpenAPI 3.1 契约。
+
+## M1 Android 已覆盖
+
+- 原生 Kotlin + Jetpack Compose 界面，读取 `/v1/podcasts` 和节目单集列表。
+- Media3 ExoPlayer + `MediaSessionService` 播放公开 RSS 音频，支持播放、暂停、进度跳转、
+  后台媒体通知、音频焦点和耳机拔出暂停。
+- “提问”会先暂停并捕获播放器的 `episode_id + anchor_ms`，创建 Conversation Branch，展示
+  `spoken_answer` 和 `visual_summary`，并可追加多轮文字追问。
+- “继续播放”先调用 `/resume`，只使用服务端返回的 `resume_position_ms` 跳转和播放；Android
+  不自行计算回退秒数。
+- 后端地址通过 Gradle property 注入；模拟器默认使用 `http://10.0.2.2:8765`，没有把
+  `localhost` 写死。
 
 ## 本地运行
 
@@ -147,3 +159,52 @@ API、个人知识库或千问 AI 眼镜适配。它也不会从提问自动生�
 未来模型提供方必须按问题路由所需层级，不能把四层材料无差别拼接。
 
 更详细的取舍见 [M0 架构决策](docs/architecture-decisions.md)。
+
+## Android 构建与运行
+
+Android 工程位于 `android/`，要求 JDK 17+、Android SDK Platform 35 和 Build Tools 35。
+Gradle Wrapper 会自动取得其余构建依赖。
+
+```bash
+cd android
+./gradlew testDebugUnitTest lintDebug assembleDebug
+```
+
+Debug APK 位于 `android/app/build/outputs/apk/debug/app-debug.apk`。Android 单测覆盖 M0 JSON
+映射、暂停/锚点捕获、追问状态，以及恢复位置只能来自服务端。
+
+### 启动本地后端
+
+先在仓库根目录准备离线样本并启动服务：
+
+```bash
+python3 -m castnets --db data/android.sqlite3 sync --file castnets/sample/episode.xml
+python3 -m castnets --db data/android.sqlite3 serve --port 8765
+```
+
+后端需保持运行。样本单集使用公开音频 URL，因此手机播放音频时仍需联网；问答本身使用 M0
+mock，不需要 API key。
+
+### Android 模拟器
+
+Android Emulator 用 `10.0.2.2` 访问宿主机的 loopback，直接构建安装即可：
+
+```bash
+cd android
+./gradlew installDebug
+```
+
+### USB 真机
+
+M0 后端刻意只监听宿主机 `127.0.0.1`。USB 调试设备可用 ADB reverse 安全转发，再在构建时
+覆盖地址：
+
+```bash
+adb reverse tcp:8765 tcp:8765
+cd android
+./gradlew installDebug -PCASTNETS_API_BASE_URL=http://127.0.0.1:8765
+```
+
+每个不同的后端地址都需要重新构建/安装 Debug APK。当前 M1 为本地开发允许明文 HTTP；不要把
+此配置直接用于生产服务。若 ADB reverse 不可用，应在带认证和 TLS 的可访问后端部署 `/v1`
+API，并通过同一 property 注入 HTTPS URL。

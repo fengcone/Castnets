@@ -2,8 +2,11 @@ __pycache__/
 *.py[cod]
 .venv/
 *.egg-info/
-data/
+/data/
 .env
 .env.*
 !.env.example
 .DS_Store
+.gradle/
+**/build/
+local.properties
